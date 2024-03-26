@@ -1,0 +1,218 @@
+openapi: 3.0.3
+info:
+  title: Messenger API
+  version: 1.0.0
+  contact: {}
+servers:
+  - url: http://localhost
+paths:
+  /users:
+    get:
+      tags:
+        - Пользователи
+      summary: Поиск пользователя по логину
+      description: Поиск пользователя по логину
+      operationId: '1'
+      parameters:
+        - name: login
+          in: query
+          schema:
+            type: string
+            example: johndoe
+      responses:
+        '200':
+          description: ''
+    post:
+      tags:
+        - Пользователи
+      summary: Создание нового пользователя+
+      description: Создание нового пользователя+
+      operationId: ''
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                first_name:
+                  type: string
+                  example: John
+                last_name:
+                  type: string
+                  example: Doe
+                login:
+                  type: string
+                  example: johndoe
+                password:
+                  type: string
+                  example: password123
+            examples:
+              Создание нового пользователя+:
+                value:
+                  first_name: John
+                  last_name: Doe
+                  login: johndoe
+                  password: password123
+      responses:
+        '200':
+          description: ''
+  /users/search/john:
+    get:
+      tags:
+        - Пользователи
+      summary: Поиск пользователя по маске имени и фамилии
+      description: Поиск пользователя по маске имени и фамилии
+      operationId: '2'
+      responses:
+        '200':
+          description: ''
+  /users/4:
+    get:
+      tags:
+        - Пользователи
+      summary: Получение пользователя по id+
+      description: Получение пользователя по id+
+      operationId: id
+      responses:
+        '200':
+          description: ''
+    put:
+      tags:
+        - Пользователи
+      summary: Обновление данных пользователя+
+      description: Обновление данных пользователя+
+      operationId: '3'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                first_name:
+                  type: string
+                  example: John updated
+                last_name:
+                  type: string
+                  example: Doe
+                login:
+                  type: string
+                  example: johndoe
+            examples:
+              Обновление данных пользователя+:
+                value:
+                  first_name: John updated
+                  last_name: Doe
+                  login: johndoe
+      responses:
+        '200':
+          description: ''
+  /chats:
+    post:
+      tags:
+        - Чаты
+      summary: Создание группового чата
+      description: Создание группового чата
+      operationId: '4'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                is_group_chat:
+                  type: boolean
+                  example: true
+                name:
+                  type: string
+                  example: Group Chat
+            examples:
+              Создание группового чата:
+                value:
+                  is_group_chat: true
+                  name: Group Chat
+      responses:
+        '200':
+          description: ''
+  /chats/1/members:
+    post:
+      tags:
+        - Чаты
+      summary: Добавление пользователя в чат
+      description: Добавление пользователя в чат
+      operationId: '5'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: number
+                  example: 1
+            examples:
+              Добавление пользователя в чат:
+                value:
+                  user_id: 1
+      responses:
+        '200':
+          description: ''
+  /messages/1:
+    get:
+      tags:
+        - Сообщения
+      summary: Загрузка сообщений группового чата
+      description: Загрузка сообщений группового чата
+      operationId: '6'
+      responses:
+        '200':
+          description: ''
+  /messages:
+    post:
+      tags:
+        - Сообщения
+      summary: Отправка PtP сообщения пользователю
+      description: Отправка PtP сообщения пользователю
+      operationId: ptp
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                chat_id:
+                  type: number
+                  example: 1
+                content:
+                  type: string
+                  example: Hello, group!
+                sender_id:
+                  type: number
+                  example: 1
+            examples:
+              Добавление сообщения в групповой чат:
+                value:
+                  chat_id: 1
+                  content: Hello, group!
+                  sender_id: 1
+              Отправка PtP сообщения пользователю:
+                value:
+                  chat_id: 2
+                  content: Private message
+                  sender_id: 1
+      responses:
+        '200':
+          description: ''
+  /messages/private/1:
+    get:
+      tags:
+        - Сообщения
+      summary: Получение PtP списка сообщений для пользователя
+      description: Получение PtP списка сообщений для пользователя
+      operationId: ptp1
+      responses:
+        '200':
+          description: ''
+tags:
+  - name: Пользователи
+  - name: Чаты
+  - name: Сообщения

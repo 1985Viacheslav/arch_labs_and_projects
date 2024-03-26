@@ -1,0 +1,3 @@
+/mnt/c/Users/alexa/Desktop/task2/build/CMakeFiles/messenger_service.dir
+/mnt/c/Users/alexa/Desktop/task2/build/CMakeFiles/edit_cache.dir
+/mnt/c/Users/alexa/Desktop/task2/build/CMakeFiles/rebuild_cache.dir
