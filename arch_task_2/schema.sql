@@ -13,15 +13,15 @@ CREATE TABLE chats (
 );
 
 CREATE TABLE user_chats (
-  user_id INTEGER REFERENCES users(id),
-  chat_id INTEGER REFERENCES chats(id),
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  chat_id INTEGER REFERENCES chats(id) ON DELETE CASCADE,
   PRIMARY KEY (user_id, chat_id)
 );
 
 CREATE TABLE messages (
   id SERIAL PRIMARY KEY,
-  sender_id INTEGER REFERENCES users(id),
-  chat_id INTEGER REFERENCES chats(id),
+  sender_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  chat_id INTEGER REFERENCES chats(id) ON DELETE CASCADE,
   content TEXT NOT NULL,
   timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

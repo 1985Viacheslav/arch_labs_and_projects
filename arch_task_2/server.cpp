@@ -4,6 +4,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <map>
 
 #include <Poco/Data/PostgreSQL/Connector.h>
 #include <Poco/Data/PostgreSQL/PostgreSQLException.h>
@@ -61,6 +62,49 @@ public:
     MessengerHandler() : _session(nullptr) {
         _logger.setLevel("information");
     }
+
+    Poco::JSON::Object::Ptr extractJsonObject(Poco::Data::RecordSet& recordSet)
+    {
+        Poco::JSON::Object::Ptr jsonObject;
+
+        if (recordSet.rowCount() > 0)
+        {
+            std::string jsonString = recordSet["json"].convert<std::string>();
+            
+            if (!jsonString.empty())
+            {
+                Poco::JSON::Parser parser;
+                Poco::Dynamic::Var result = parser.parse(jsonString);
+                
+                if (result.type() == typeid(Poco::JSON::Object::Ptr)) 
+                {
+                    jsonObject = result.extract<Poco::JSON::Object::Ptr>();
+                } 
+                else if (result.type() == typeid(Poco::JSON::Array::Ptr)) 
+                {
+                    Poco::JSON::Array::Ptr jsonArray = result.extract<Poco::JSON::Array::Ptr>();
+                    jsonObject = new Poco::JSON::Object();
+                    jsonObject->set("data", jsonArray);
+                }
+            }
+        }
+        return jsonObject;
+    }
+
+    void sendJsonResponse(Poco::Net::HTTPServerResponse& response, Poco::JSON::Object::Ptr jsonObject, Poco::Net::HTTPResponse::HTTPStatus status)
+    {
+        response.setStatus(status);
+        response.setContentType("application/json");
+        std::ostream& ostr = response.send();
+        Poco::JSON::Stringifier::stringify(jsonObject, ostr);
+    }
+
+    Poco::JSON::Object::Ptr getBody(HTTPServerRequest& request)
+    {
+        Poco::JSON::Parser parser;
+        Poco::Dynamic::Var result = parser.parse(request.stream());
+        return result.extract<Poco::JSON::Object::Ptr>();
+    }
     
     void handleRequest(HTTPServerRequest& request, HTTPServerResponse& response) override
     {
@@ -87,18 +131,26 @@ public:
             }
 
             Poco::URI requestUri(path);
+            Poco::URI paramsUri(uri);
             std::vector<std::string> parts;
             requestUri.getPathSegments(parts);
+            auto params = paramsUri.getQueryParameters();
 
             _logger.information("Request URI: " + uri);
-            _logger.information("Request path: " + path);
             _logger.information("Request query: " + query);
-            _logger.information("Parts: ");
+            _logger.information("Parts (" + std::to_string(parts.size()) + "): ");
             for (auto part : parts)
             {
-                _logger.information(part);
+                _logger.information("- " + part);
+            }     
+
+            _logger.information("Params (" + std::to_string(params.size()) + "): ");            
+            std::map<std::string, std::string> params_map;
+            for (auto param : params)
+            {
+                _logger.information("- " + param.first + "|" + param.second);
+                params_map[param.first] = param.second;
             }
-            
             
             if (parts.size() >= 1)
             {
@@ -108,7 +160,105 @@ public:
                 {
                     if (request.getMethod() == Poco::Net::HTTPRequest::HTTP_GET)
                     {                        
-                        if (parts.size() == 1)
+                        if (parts.size() == 1 && !params_map.find("login")->first.empty())
+                        {
+                            // Поиск пользователя по логину
+                            try
+                            {
+                                std::string login = params_map.find("login")->second;
+
+                                Statement select(*_session);
+                                select << "SELECT row_to_json(t) AS json FROM (SELECT id, login, first_name, last_name FROM users WHERE login = $1) t",
+                                    use(login),
+                                    now;
+
+                                select.execute();
+                                Poco::Data::RecordSet recordSet(select);
+                                Poco::JSON::Object::Ptr user = extractJsonObject(recordSet);
+
+                                if (user && user->size())
+                                {
+                                    sendJsonResponse(response, user, Poco::Net::HTTPResponse::HTTP_OK);
+                                }
+                                else
+                                {
+                                    response.setStatus(Poco::Net::HTTPResponse::HTTP_NOT_FOUND);
+                                    response.send();
+                                }
+                            }
+                            catch (Poco::Exception& exc)
+                            {
+                                std::cerr << exc.displayText() << std::endl;
+                                response.setStatus(Poco::Net::HTTPResponse::HTTP_INTERNAL_SERVER_ERROR);
+                                response.send();
+                            }
+                        }
+                        else if (parts.size() == 2)
+                        {
+                            // Получение пользователя по id
+                            try {
+                                int user_id = std::stoi(parts[1]);
+                                
+                                Statement select(*_session);
+                                select << "SELECT row_to_json(t) AS json FROM (SELECT id, login, first_name, last_name FROM users WHERE id = $1) t",
+                                    use(user_id),
+                                    now;
+
+                                select.execute();
+                                Poco::Data::RecordSet recordSet(select);
+                                Poco::JSON::Object::Ptr user = extractJsonObject(recordSet);
+
+                                if (user && user->size())
+                                {
+                                    sendJsonResponse(response, user, Poco::Net::HTTPResponse::HTTP_OK);
+                                }
+                                else
+                                {
+                                    response.setStatus(Poco::Net::HTTPResponse::HTTP_NOT_FOUND);
+                                    response.send();
+                                }
+                            } catch (const Poco::Exception& exc) {
+                                std::cerr << exc.displayText() << std::endl;
+                                response.setStatus(Poco::Net::HTTPResponse::HTTP_INTERNAL_SERVER_ERROR);
+                                response.send();
+                            }
+                        }
+                        else if (parts.size() == 3 && parts[1] == "search")
+                        {
+                            // Поиск пользователей по логину, имени и фамилии
+                            try {
+                                std::string query = parts[2];
+                                std::string pattern = "%" + query + "%";
+
+                                Statement select(*_session);
+                                select << "SELECT array_to_json(array_agg(row_to_json(t))) AS json FROM (SELECT id, login, first_name, last_name FROM users WHERE login LIKE $1 OR first_name LIKE $2 OR last_name LIKE $3) t",
+                                    use(pattern),
+                                    use(pattern),
+                                    use(pattern),
+                                    now;
+
+                                select.execute();
+                                Poco::Data::RecordSet recordSet(select);
+                                _logger.information(std::to_string(recordSet.rowCount()));
+                                if (recordSet.rowCount() > 0)
+                                {
+                                    Poco::JSON::Object::Ptr result = extractJsonObject(recordSet);
+                                    sendJsonResponse(response, result, Poco::Net::HTTPResponse::HTTP_OK);
+                                }
+                                else
+                                {                                    
+                                    Poco::JSON::Object::Ptr emptyResult = new Poco::JSON::Object;  
+                                    emptyResult->set("users", Poco::JSON::Array());          
+                                    sendJsonResponse(response, emptyResult, Poco::Net::HTTPResponse::HTTP_OK);
+                                }
+                            }
+                            catch (Poco::Exception& exc) {
+                                std::cerr << exc.displayText() << std::endl;
+                                response.setStatus(Poco::Net::HTTPResponse::HTTP_INTERNAL_SERVER_ERROR);
+                                response.send();
+                            }
+                        }
+                        else if (parts.size() == 1)
                         {
                             // Получение списка всех пользователей                            
                             try {
@@ -141,110 +291,6 @@ public:
                                 response.send();
                             }
 
-                        }
-                        else if (parts.size() == 2 && parts[1] == "login")
-                        {
-                            // Поиск пользователя по логину
-                            try
-                            {
-                                std::string login = request.get("login");
-                                
-                                Poco::JSON::Object user;
-                                Statement select(*_session);
-                                select << "SELECT id, login, first_name, last_name FROM users WHERE login = $1",
-                                    into(user),
-                                    use(login),
-                                    now;
-                                
-                                if (user.size() > 0)
-                                {
-                                    response.setStatus(Poco::Net::HTTPResponse::HTTP_OK);
-                                    response.setContentType("application/json");
-                                    std::ostream& ostr = response.send();
-                                    Poco::JSON::Stringifier::stringify(user, ostr);
-                                }
-                                else
-                                {
-                                    response.setStatus(Poco::Net::HTTPResponse::HTTP_NOT_FOUND);
-                                    response.send();
-                                }
-                            }
-                            catch (Poco::Exception& exc)
-                            {
-                                std::cerr << exc.displayText() << std::endl;
-                                response.setStatus(Poco::Net::HTTPResponse::HTTP_INTERNAL_SERVER_ERROR);
-                                response.send();
-                            }
-                        }
-                        else if (parts.size() == 2)
-                        {
-                            // Получение пользователя по id
-                            try {
-                                int user_id = std::stoi(parts[1]);
-                                
-                                UserData userData;
-                                Poco::Data::Statement select(*_session);
-                                select << "SELECT id, login, first_name, last_name FROM users WHERE id = $1", 
-                                    use(user_id), 
-                                    into(userData.id), 
-                                    into(userData.login), 
-                                    into(userData.first_name), 
-                                    into(userData.last_name), 
-                                    now;
-
-                                // Проверяем, были ли извлечены какие-либо данные
-                                if (select.done() && userData.id != 0) {
-                                    Poco::JSON::Object::Ptr user = new Poco::JSON::Object;
-                                    user->set("id", userData.id);
-                                    user->set("login", userData.login);
-                                    user->set("first_name", userData.first_name);
-                                    user->set("last_name", userData.last_name);
-
-                                    response.setStatus(Poco::Net::HTTPResponse::HTTP_OK);
-                                    response.setContentType("application/json");
-                                    std::ostream& ostr = response.send();
-                                    Poco::JSON::Stringifier::stringify(user, ostr);
-                                } else {
-                                    response.setStatus(Poco::Net::HTTPResponse::HTTP_NOT_FOUND);
-                                    response.send();
-                                }
-                            } catch (const Poco::Exception& exc) {
-                                std::cerr << exc.displayText() << std::endl;
-                                response.setStatus(Poco::Net::HTTPResponse::HTTP_INTERNAL_SERVER_ERROR);
-                                response.send();
-                            }
-                        }
-                        else if (parts.size() == 3 && parts[1] == "search")
-                        {
-                            // Поиск пользователей по логину, имени и фамилии
-                            try
-                            {
-                                std::string query = parts[3];
-                                
-                                Poco::JSON::Array users;
-                                std::string pattern = "%" + query + "%";
-                                Statement select(*_session);
-                                select << "SELECT id, login, first_name, last_name FROM users WHERE login LIKE $1 OR first_name LIKE $2 OR last_name LIKE $3",
-                                    into(users),
-                                    use(pattern),
-                                    use(pattern),
-                                    use(pattern),
-                                    now;
-                                
-                                Poco::JSON::Object result;
-                                result.set("users", users);
-                                
-                                response.setStatus(Poco::Net::HTTPResponse::HTTP_OK);
-                                response.setContentType("application/json");
-                                std::ostream& ostr = response.send();
-                                Poco::JSON::Stringifier::stringify(result, ostr);
-                            }
-                            catch (Poco::Exception& exc)
-                            {
-                                std::cerr << exc.displayText() << std::endl;
-                                response.setStatus(Poco::Net::HTTPResponse::HTTP_INTERNAL_SERVER_ERROR);
-                                response.send();
-                            }
                         }
                         else
                         {
@@ -329,10 +375,10 @@ public:
                         // Удаление пользователя
                         try
                         {
-                            int user_id = std::stoi(parts[2]);
+                            int user_id = std::stoi(parts[1]);
                             
                             Statement delete_(*_session);
-                            delete_ << "DELETE FROM users WHERE id = ?",
+                            delete_ << "DELETE FROM users WHERE id = $1",
                                 use(user_id),
                                 now;
                             
@@ -356,24 +402,28 @@ public:
                 {
                     if (request.getMethod() == Poco::Net::HTTPRequest::HTTP_GET)
                     {
-                        if (parts.size() == 2)
+                        if (parts.size() == 1)
                         {
                             // Получение списка всех чатов
                             try
                             {
-                                Poco::JSON::Array chats;
                                 Statement select(*_session);
-                                select << "SELECT id, name, is_group_chat FROM chats",
-                                    into(chats),
+                                select << "SELECT array_to_json(array_agg(row_to_json(t))) AS json FROM (SELECT id, name, is_group_chat FROM chats) t",
                                     now;
+                                
+                                select.execute();
+                                Poco::Data::RecordSet recordSet(select);
+                                Poco::JSON::Object::Ptr chats = extractJsonObject(recordSet);
                                 
                                 Poco::JSON::Object result;
                                 result.set("chats", chats);
                                 
                                 response.setStatus(Poco::Net::HTTPResponse::HTTP_OK);
                                 response.setContentType("application/json");
+                                
                                 std::ostream& ostr = response.send();
                                 Poco::JSON::Stringifier::stringify(result, ostr);
+
                             }
                             catch (Poco::Exception& exc)
                             {
@@ -382,26 +432,25 @@ public:
                                 response.send();
                             }
                         }
-                        else if (parts.size() == 3)
+                        else if (parts.size() == 2)
                         {
                             // Получение чата по id
                             try
                             {
-                                int chat_id = std::stoi(parts[2]);
+                                int chat_id = std::stoi(parts[1]);
                                 
-                                Poco::JSON::Object chat;
                                 Statement select(*_session);
-                                select << "SELECT id, name, is_group_chat FROM chats WHERE id = ?",
-                                    into(chat),
+                                select << "SELECT row_to_json(t) AS json FROM (SELECT id, name, is_group_chat FROM chats WHERE id = $1) t",
                                     use(chat_id),
                                     now;
+
+                                select.execute();
+                                Poco::Data::RecordSet recordSet(select);
+                                Poco::JSON::Object::Ptr chat = extractJsonObject(recordSet);
                                 
-                                if (chat.size() > 0)
+                                if (chat && chat->size() > 0)
                                 {
-                                    response.setStatus(Poco::Net::HTTPResponse::HTTP_OK);
-                                    response.setContentType("application/json");
-                                    std::ostream& ostr = response.send();
-                                    Poco::JSON::Stringifier::stringify(chat, ostr);
+                                    sendJsonResponse(response, chat, Poco::Net::HTTPResponse::HTTP_OK);
                                 }
                                 else
                                 {
@@ -422,6 +471,85 @@ public:
                             response.send();
                         }
                     }
+                    else if (request.getMethod() == Poco::Net::HTTPRequest::HTTP_DELETE)
+                    {
+                        // Удаление чата
+                        try {
+                            int chat_id = std::stoi(parts[1]);
+
+                            Statement deleteChat(*_session);
+                            deleteChat << "DELETE FROM chats WHERE id = $1",
+                                use(chat_id),
+                                now;
+
+                            Statement deleteUserChats(*_session);
+                            deleteUserChats << "DELETE FROM user_chats WHERE chat_id = $1",
+                                use(chat_id),
+                                now;
+
+                            Statement deleteMessages(*_session);
+                            deleteMessages << "DELETE FROM messages WHERE chat_id = $1",
+                                use(chat_id),
+                                now;
+
+                            response.setStatus(Poco::Net::HTTPResponse::HTTP_OK);
+                            response.send();
+                        } catch (Poco::Exception& exc) {
+                            std::cerr << exc.displayText() << std::endl;
+                            response.setStatus(Poco::Net::HTTPResponse::HTTP_INTERNAL_SERVER_ERROR);
+                            response.send();
+                        }
+                    }
+                    else if (request.getMethod() == Poco::Net::HTTPRequest::HTTP_POST && parts.size() == 3 && parts[2] == "members")
+                    {
+                        // Добавление пользователя в чат
+                        try
+                        {
+                            int chat_id = std::stoi(parts[1]);
+
+                            Poco::JSON::Parser parser;
+                            Poco::Dynamic::Var result = parser.parse(request.stream());
+                            Poco::JSON::Object::Ptr requestBody = result.extract<Poco::JSON::Object::Ptr>();
+
+                            if (requestBody->has("user_id"))
+                            {
+                                int user_id = requestBody->getValue<int>("user_id");
+                                _logger.information("test");
+                                Statement insert(*_session);
+                                insert << "INSERT INTO user_chats (user_id, chat_id) VALUES ($1, $2)",
+                                    use(user_id),
+                                    use(chat_id),
+                                    now;
+                                try
+                                {
+                                    Poco::JSON::Object::Ptr responseBody = new Poco::JSON::Object();
+                                    responseBody->set("message", "User added to chat successfully");
+
+                                    sendJsonResponse(response, responseBody, Poco::Net::HTTPResponse::HTTP_CREATED);
+                                }
+                                catch(Poco::Exception& exc)
+                                {
+                                    Poco::JSON::Object::Ptr errorBody = new Poco::JSON::Object();
+                                    errorBody->set("error", "Error appending user to chat, check both instances for correctness!");
+
+                                    sendJsonResponse(response, errorBody, Poco::Net::HTTPResponse::HTTP_BAD_REQUEST);
+                                }
+                            }
+                            else
+                            {
+                                Poco::JSON::Object::Ptr errorBody = new Poco::JSON::Object();
+                                errorBody->set("error", "Missing user_id in request body");
+
+                                sendJsonResponse(response, errorBody, Poco::Net::HTTPResponse::HTTP_BAD_REQUEST);
+                            }
+                        }
+                        catch (Poco::Exception& exc)
+                        {
+                            std::cerr << exc.displayText() << std::endl;
+                            response.setStatus(Poco::Net::HTTPResponse::HTTP_INTERNAL_SERVER_ERROR);
+                            response.send();
+                        }
+                    }
                     else if (request.getMethod() == Poco::Net::HTTPRequest::HTTP_POST)
                     {
                         // Создание нового чата
@@ -435,38 +563,9 @@ public:
                             bool is_group_chat = chat->getValue<bool>("is_group_chat");
                             
                             Statement insert(*_session);
-                            insert << "INSERT INTO chats (name, is_group_chat) VALUES (?, ?)",
+                            insert << "INSERT INTO chats (name, is_group_chat) VALUES ($1, $2)",
                                 use(name),
                                 use(is_group_chat),
-                                now;
-                            
-                            response.setStatus(Poco::Net::HTTPResponse::HTTP_CREATED);
-                            response.send();
-                        }
-                        catch (Poco::Exception& exc)
-                        {
-                            std::cerr << exc.displayText() << std::endl;
-                            response.setStatus(Poco::Net::HTTPResponse::HTTP_INTERNAL_SERVER_ERROR);
-                            response.send();
-                        }
-                    }
-                    else if (request.getMethod() == Poco::Net::HTTPRequest::HTTP_POST && parts.size() == 4 && parts[3] == "members")
-                    {
-                        // Добавление пользователя в чат
-                        try
-                        {
-                            int chat_id = std::stoi(parts[2]);
-
-                            Poco::JSON::Parser parser;
-                            Poco::Dynamic::Var result = parser.parse(request.stream());
-                            Poco::JSON::Object::Ptr member = result.extract<Poco::JSON::Object::Ptr>();
-                            
-                            int user_id = member->getValue<int>("user_id");
-                            
-                            Statement insert(*_session);
-                            insert << "INSERT INTO user_chats (user_id, chat_id) VALUES (?, ?)",
-                                use(user_id),
-                                use(chat_id),
                                 now;
                             
                             response.setStatus(Poco::Net::HTTPResponse::HTTP_CREATED);
@@ -487,28 +586,33 @@ public:
                 }
                 else if (resource == "messages")
                 {
-                    if (request.getMethod() == Poco::Net::HTTPRequest::HTTP_GET && parts.size() == 4 && parts[2] == "private")
+                    if (request.getMethod() == Poco::Net::HTTPRequest::HTTP_GET && parts.size() == 3 && parts[1] == "private")
                     {
                         // Получение PtP списка сообщений для пользователя
                         try
                         {
-                            int user_id = std::stoi(parts[3]);
+                            int user_id = std::stoi(parts[2]);
                             
-                            Poco::JSON::Array messages;
                             Statement select(*_session);
-                            select << "SELECT m.id, m.sender_id, m.chat_id, m.content, m.timestamp "
+                            select << "SELECT array_to_json(array_agg(row_to_json(t))) AS json FROM ("
+                                    "SELECT m.id, m.sender_id, m.chat_id, m.content, m.timestamp "
                                     "FROM messages m "
                                     "JOIN user_chats uc ON m.chat_id = uc.chat_id "
-                                    "WHERE uc.user_id = ? AND uc.chat_id IN (SELECT id FROM chats WHERE is_group_chat = false)",
-                                into(messages),
+                                    "WHERE uc.user_id = $1 AND uc.chat_id IN (SELECT id FROM chats WHERE is_group_chat = false)"
+                                    ") t",
                                 use(user_id),
                                 now;
                             
+                            select.execute();
+                            Poco::Data::RecordSet recordSet(select);
+                            Poco::JSON::Object::Ptr messages = extractJsonObject(recordSet);
+
                             Poco::JSON::Object result;
                             result.set("messages", messages);
                             
                             response.setStatus(Poco::Net::HTTPResponse::HTTP_OK);
                             response.setContentType("application/json");
+
                             std::ostream& ostr = response.send();
                             Poco::JSON::Stringifier::stringify(result, ostr);
                         }
@@ -522,28 +626,29 @@ public:
                     else if (request.getMethod() == Poco::Net::HTTPRequest::HTTP_GET)
                     {
                         // Получение сообщений чата
-                        try
-                        {
-                            int chat_id = std::stoi(parts[2]);
+                        try {
+                            int chat_id = std::stoi(parts[1]);
                             
-                            Poco::JSON::Array messages;
                             Statement select(*_session);
-                            select << "SELECT id, sender_id, chat_id, content, timestamp FROM messages WHERE chat_id = ?",
-                                into(messages),
+                            select << "SELECT array_to_json(array_agg(row_to_json(t))) AS json FROM (SELECT m.id, m.sender_id, m.chat_id, m.content, m.timestamp FROM messages m JOIN chats c ON m.chat_id = c.id WHERE c.id = $1 AND c.is_group_chat = true) t",
                                 use(chat_id),
                                 now;
-                            
-                            Poco::JSON::Object result;
-                            result.set("messages", messages);
-                            
-                            response.setStatus(Poco::Net::HTTPResponse::HTTP_OK);
-                            response.setContentType("application/json");
-                            std::ostream& ostr = response.send();
-                            Poco::JSON::Stringifier::stringify(result, ostr);
-                        }
-                        catch (Poco::Exception& exc)
-                        {
-                            std::cerr << exc.displayText() << std::endl;
+                                
+                            select.execute();
+                            Poco::Data::RecordSet recordSet(select);
+
+                            try
+                            {
+                                Poco::JSON::Object::Ptr result = extractJsonObject(recordSet);
+                                sendJsonResponse(response, result, Poco::Net::HTTPResponse::HTTP_OK);
+                            }
+                            catch(Poco::InvalidAccessException)
+                            {
+                                response.setStatus(Poco::Net::HTTPResponse::HTTP_NOT_FOUND);
+                                response.send();
+                            }                            
+                        } catch (Poco::Exception& exc) {
+                            std::cerr << exc.displayText() << exc.className() << std::endl;
                             response.setStatus(Poco::Net::HTTPResponse::HTTP_INTERNAL_SERVER_ERROR);
                             response.send();
                         }
@@ -562,7 +667,7 @@ public:
                             std::string content = message->getValue<std::string>("content");
                             
                             Statement insert(*_session);
-                            insert << "INSERT INTO messages (sender_id, chat_id, content) VALUES (?, ?, ?)",
+                            insert << "INSERT INTO messages (sender_id, chat_id, content) VALUES ($1, $2, $3)",
                                 use(sender_id),
                                 use(chat_id),
                                 use(content),
@@ -573,6 +678,25 @@ public:
                         }
                         catch (Poco::Exception& exc)
                         {
+                            std::cerr << exc.displayText() << std::endl;
+                            response.setStatus(Poco::Net::HTTPResponse::HTTP_INTERNAL_SERVER_ERROR);
+                            response.send();
+                        }
+                    }
+                    else if (request.getMethod() == Poco::Net::HTTPRequest::HTTP_DELETE)
+                    {
+                        // Удаление сообщения
+                        try {
+                            int message_id = std::stoi(parts[1]);
+
+                            Statement deleteMessage(*_session);
+                            deleteMessage << "DELETE FROM messages WHERE id = $1",
+                                use(message_id),
+                                now;
+
+                            response.setStatus(Poco::Net::HTTPResponse::HTTP_OK);
+                            response.send();
+                        } catch (Poco::Exception& exc) {
                             std::cerr << exc.displayText() << std::endl;
                             response.setStatus(Poco::Net::HTTPResponse::HTTP_INTERNAL_SERVER_ERROR);
                             response.send();

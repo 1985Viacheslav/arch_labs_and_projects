@@ -67,6 +67,10 @@
         "__hash_table": "cpp",
         "__split_buffer": "cpp",
         "__tree": "cpp",
-        "ios": "cpp"
-    }
+        "ios": "cpp",
+        "queue": "cpp",
+        "stack": "cpp",
+        "__locale": "cpp"
+    },
+    "cmake.configureOnOpen": false
 }

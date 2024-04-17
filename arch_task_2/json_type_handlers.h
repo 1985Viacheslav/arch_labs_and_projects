@@ -8,8 +8,8 @@
 namespace Poco {
 namespace Data {
 
-template <>
-class TypeHandler<Poco::JSON::Object>
+template <typename T>
+class JSONTypeHandler
 {
 public:
     static std::size_t size()
@@ -17,7 +17,7 @@ public:
         return 1;
     }
 
-    static void bind(std::size_t pos, const Poco::JSON::Object& obj, AbstractBinder::Ptr pBinder, AbstractBinder::Direction dir)
+    static void bind(std::size_t pos, const T& obj, AbstractBinder::Ptr pBinder, AbstractBinder::Direction dir)
     {
         std::ostringstream oss;
         obj.stringify(oss);
@@ -25,14 +25,15 @@ public:
         TypeHandler<std::string>::bind(pos, json, pBinder, dir);
     }
 
-    static void extract(std::size_t pos, Poco::JSON::Object& obj, const Poco::JSON::Object& defVal, AbstractExtractor::Ptr pExt)
+    static void extract(std::size_t pos, T& obj, const T& defVal, AbstractExtractor::Ptr pExt)
     {
         std::string json;
-        TypeHandler<std::string>::extract(pos, json, "", pExt);
+        TypeHandler<std::string>::extract(pos, json, std::string(), pExt);
         if (!json.empty())
         {
             Poco::JSON::Parser parser;
-            obj = parser.parse(json).extract<Poco::JSON::Object>();
+            Poco::Dynamic::Var result = parser.parse(json);
+            obj = result.extract<T>();
         }
         else
         {
@@ -40,7 +41,7 @@ public:
         }
     }
 
-    static void prepare(std::size_t pos, const Poco::JSON::Object& obj, AbstractPreparator::Ptr pPreparator)
+    static void prepare(std::size_t pos, const T& obj, AbstractPreparator::Ptr pPreparator)
     {
         std::ostringstream oss;
         obj.stringify(oss);
@@ -50,44 +51,13 @@ public:
 };
 
 template <>
-class TypeHandler<Poco::JSON::Array>
+class TypeHandler<Poco::JSON::Object> : public JSONTypeHandler<Poco::JSON::Object>
 {
-public:
-    static std::size_t size()
-    {
-        return 1;
-    }
+};
 
-    static void bind(std::size_t pos, const Poco::JSON::Array& arr, AbstractBinder::Ptr pBinder, AbstractBinder::Direction dir)
-    {
-        std::ostringstream oss;
-        arr.stringify(oss);
-        std::string json = oss.str();
-        TypeHandler<std::string>::bind(pos, json, pBinder, dir);
-    }
-
-    static void extract(std::size_t pos, Poco::JSON::Array& arr, const Poco::JSON::Array& defVal, AbstractExtractor::Ptr pExt)
-    {
-        std::string json;
-        TypeHandler<std::string>::extract(pos, json, "", pExt);
-        if (!json.empty())
-        {
-            Poco::JSON::Parser parser;
-            arr = parser.parse(json).extract<Poco::JSON::Array>();
-        }
-        else
-        {
-            arr = defVal;
-        }
-    }
-
-    static void prepare(std::size_t pos, const Poco::JSON::Array& arr, AbstractPreparator::Ptr pPreparator)
-    {
-        std::ostringstream oss;
-        arr.stringify(oss);
-        std::string json = oss.str();
-        TypeHandler<std::string>::prepare(pos, json, pPreparator);
-    }
+template <>
+class TypeHandler<Poco::JSON::Array> : public JSONTypeHandler<Poco::JSON::Array>
+{
 };
 
 } // namespace Data

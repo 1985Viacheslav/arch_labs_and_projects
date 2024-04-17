@@ -291,19 +291,12 @@ CMakeFiles/messenger_service.dir/server.cpp.o: \
  /usr/local/include/Poco/RefCountedObject.h \
  /usr/local/include/Poco/Tuple.h /usr/local/include/Poco/TypeList.h \
  /usr/local/include/Poco/AutoPtr.h \
- /usr/local/include/Poco/Data/MySQL/Connector.h \
- /usr/local/include/Poco/Data/MySQL/MySQL.h /usr/include/mysql/mysql.h \
- /usr/lib/gcc/x86_64-linux-gnu/11/include/stdbool.h \
- /usr/include/mysql/field_types.h /usr/include/mysql/my_list.h \
- /usr/include/mysql/mysql_com.h /usr/include/mysql/my_command.h \
- /usr/include/mysql/my_compress.h \
- /usr/include/mysql/udf_registration_types.h \
- /usr/include/mysql/client_plugin.h /usr/include/c++/11/stdlib.h \
- /usr/include/mysql/plugin_auth_common.h \
- /usr/include/mysql/mysql_version.h /usr/include/mysql/mysql_time.h \
- /usr/include/mysql/errmsg.h /usr/local/include/Poco/Data/Connector.h \
+ /mnt/c/Users/alexa/Desktop/task2/userData.h \
+ /usr/include/Poco/Data/PostgreSQL/Connector.h \
+ /usr/include/Poco/Data/PostgreSQL/PostgreSQL.h \
  /usr/local/include/Poco/Data/SessionImpl.h \
- /usr/local/include/Poco/Data/MySQL/MySQLException.h \
+ /usr/local/include/Poco/Data/Connector.h \
+ /usr/include/Poco/Data/PostgreSQL/PostgreSQLException.h \
  /usr/local/include/Poco/Data/DataException.h \
  /usr/local/include/Poco/Data/SessionFactory.h \
  /usr/local/include/Poco/Data/Session.h \
@@ -336,6 +329,9 @@ CMakeFiles/messenger_service.dir/server.cpp.o: \
  /usr/local/include/Poco/Thread_POSIX.h \
  /usr/local/include/Poco/SignalHandler.h /usr/include/setjmp.h \
  /usr/local/include/Poco/Data/StatementCreator.h \
+ /usr/local/include/Poco/Data/RecordSet.h \
+ /usr/local/include/Poco/Data/RowIterator.h \
+ /usr/local/include/Poco/Data/RowFilter.h \
  /usr/local/include/Poco/Net/HTTPServer.h \
  /usr/local/include/Poco/Net/Net.h \
  /usr/local/include/Poco/Net/TCPServer.h \
@@ -432,12 +428,12 @@ CMakeFiles/messenger_service.dir/server.cpp.o: \
  /usr/include/x86_64-linux-gnu/openssl/opensslconf.h \
  /usr/include/x86_64-linux-gnu/openssl/configuration.h \
  /usr/include/openssl/err.h /usr/include/openssl/e_os2.h \
- /usr/include/openssl/types.h /usr/include/openssl/safestack.h \
- /usr/include/openssl/stack.h /usr/include/openssl/bio.h \
- /usr/include/openssl/crypto.h /usr/include/openssl/cryptoerr.h \
- /usr/include/openssl/symhacks.h /usr/include/openssl/cryptoerr_legacy.h \
- /usr/include/openssl/core.h /usr/include/openssl/bioerr.h \
- /usr/include/openssl/lhash.h \
+ /usr/include/c++/11/stdlib.h /usr/include/openssl/types.h \
+ /usr/include/openssl/safestack.h /usr/include/openssl/stack.h \
+ /usr/include/openssl/bio.h /usr/include/openssl/crypto.h \
+ /usr/include/openssl/cryptoerr.h /usr/include/openssl/symhacks.h \
+ /usr/include/openssl/cryptoerr_legacy.h /usr/include/openssl/core.h \
+ /usr/include/openssl/bioerr.h /usr/include/openssl/lhash.h \
  /usr/local/include/Poco/Crypto/OpenSSLInitializer.h \
  /usr/include/openssl/provider.h /usr/local/include/Poco/DigestEngine.h \
  /usr/include/openssl/evp.h /usr/include/openssl/core_dispatch.h \
@@ -445,4 +441,4 @@ CMakeFiles/messenger_service.dir/server.cpp.o: \
  /usr/include/openssl/bn.h /usr/include/openssl/bnerr.h \
  /usr/include/openssl/objects.h /usr/include/openssl/obj_mac.h \
  /usr/include/openssl/asn1.h /usr/include/openssl/asn1err.h \
- /usr/include/openssl/objectserr.h
+ /usr/include/openssl/objectserr.h /usr/local/include/Poco/URI.h
